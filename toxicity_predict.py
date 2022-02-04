@@ -19,7 +19,11 @@ def toxic_bert_predict(texts: List[str], model: Optional[str]=None) -> Dict[str,
             results.update({f"{model}_{k}": v for k,v in ind_result.items()})
     else:
         assert model in ["original", "unbiased", "multilingual"]
-        results = Detoxify(model).predict(texts)
+        start = time.perf_counter()
+        results = Detoxify(model).predict(texts[:10])
+        end = time.perf_counter()
+        print(f"took {end-start} seconds")
+
         results = {f"{model}_{k}":v for k,v in results.items()}
     return results
 
@@ -50,9 +54,9 @@ def perspective_predict(texts: List[str]) -> Dict[str, List[float]]:
                 response = {"attributeScores": {'TOXICITY': {}, "SEVERE_TOXICITY": {}, "IDENTITY_ATTACK": {}, "INSULT": {},
                                                 "PROFANITY": {}, "THREAT": {}}}
                 print(f"Request HTTP Error: {e}")
-        for attr, attr_score in response["attributeScores"].items():
-            output[attr].append(attr_score.get("summaryScore", {}).get("value", -1.0))
-        time.sleep(0.5)
+        for attr in output.keys():
+            output[attr].append(response["attributeScores"].get(attr, {}).get("summaryScore", {}).get("value", -1.0))
+        time.sleep(1.2)  # 60 calls per min limit
     return output
 
 
@@ -70,7 +74,8 @@ def predict_instagram(content: str, model: str):
         pred = toxic_bert_predict(text, model)
 
     pred_df = pd.DataFrame(pred)
-    df = df.append(pred_df)
+    df = pd.concat([df, pred_df], axis=1)
+    df.to_csv(f"data/{content}_toxicity.csv")
     return df
 
 
@@ -78,4 +83,5 @@ if __name__ == "__main__":
     # out = toxic_bert_predict(["Chinese people eat crazy things like chicken feet", "I hate chinese people"])
     # df = predict_instagram("caption", "original")
     df = predict_instagram("caption", "perspective")
+    df = predict_instagram("comment", "perspective")
     pass
